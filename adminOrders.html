@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin - Review Orders</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL = "https://kkwspswigckmigadbwtz.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable_7lMgT_Pk8LEniQ_0afP6KQ_YUkO3p32";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function checkAuth() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session || !session.user.email.endsWith('sfu.ca')) {
+                window.location.href = "adminLogin.html";
+            }
+        }
+        checkAuth();
+    </script>
+    <link rel="stylesheet" href="adminOrders.css">
+</head>
+<body>
+
+    <nav class="admin-navbar">
+        <div class="nav-brand">ESSS Admin Portal</div>
+        <div class="nav-links">
+            <a href="adminOrders.html" class="active">Orders</a>
+            <a href="adminProfiles.html">Profiles</a>
+            <a href="#" id="logoutLink" class="logout-link">Logout</a>
+        </div>
+    </nav>
+
+    <div class="admin-container">
+        <h2>Admin Portal: Parts Order Dashboard</h2>
+
+        <div class="section">
+            <h3>Pending Orders</h3>
+            <div class="table-responsive">
+                <table id="pendingOrders">
+                    <thead>
+                        <tr><th>ID</th><th>User Email</th><th>RFID Code</th><th>Requested Items</th><th>Notes</th><th>Last Updated</th><th>Assign Locker First</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Active Lifecycle Tracker</h3>
+            <div class="table-responsive">
+                <table id="activeOrders">
+                    <thead>
+                        <tr><th>ID</th><th>User Email</th><th>Locker #</th><th>Items List</th><th>Status State</th><th>Last Updated Stamp</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Returns Desk (Awaiting Confirmation)</h3>
+            <div class="table-responsive">
+                <table id="returnedOrders">
+                    <thead>
+                        <tr><th>ID</th><th>User Email</th><th>Locker Assigned</th><th>Items Returned</th><th>Notes</th><th>Timestamp</th><th>Action Checkpoint</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Completed Order History Archive</h3>
+            <div class="table-responsive">
+                <table id="completedOrders">
+                    <thead>
+                        <tr><th>ID</th><th>User Email</th><th>RFID Code</th><th>Items Manifest</th><th>Final Status</th><th>Closed At</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="customModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modalTitle">Alert Window</h3>
+            <p id="modalMessage">Message prompt context text here...</p>
+            <div class="modal-buttons">
+                <button id="modalCancelBtn" class="modal-btn btn-secondary">Cancel</button>
+                <button id="modalConfirmBtn" class="modal-btn btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    let orderIdToDecline = null;
+    let errorModalActive = false;
+
+    document.getElementById("logoutLink").addEventListener("click", async (e) => {
+        e.preventDefault();
+        await supabaseClient.auth.signOut();
+        window.location.href = "adminLogin.html";
+    });
+
+    async function loadOrders() {
+        const { data: requests, error } = await supabaseClient
+            .from('parts_requests')
+            .select('*')
+            .order('status_changed_at', { ascending: false });
+
+        if (error) {
+            console.error(error.message);
+            return;
+        }
+
+        const pendingBody = document.querySelector("#pendingOrders tbody");
+        const activeBody = document.querySelector("#activeOrders tbody");
+        const returnedBody = document.querySelector("#returnedOrders tbody");
+        const completedBody = document.querySelector("#completedOrders tbody");
+
+        pendingBody.innerHTML = "";
+        activeBody.innerHTML = "";
+        returnedBody.innerHTML = "";
+        completedBody.innerHTML = "";
+
+        requests.forEach(order => {
+            const dateStr = new Date(order.status_changed_at).toLocaleString();
+            
+            let itemsHTML = "<ul>";
+            if (Array.isArray(order.items)) {
+                order.items.forEach(itm => {
+                    itemsHTML += `<li>${itm.part_name} (x${itm.quantity})</li>`;
+                });
+            }
+            itemsHTML += "</ul>";
+
+            if (order.status === 'Pending') {
+                pendingBody.innerHTML += `
+                    <tr>
+                        <td>${order.id}</td>
+                        <td>${order.email}</td>
+                        <td>${order.rfid_code || '<i>Syncing...</i>'}</td>
+                        <td>${itemsHTML}</td>
+                        <td>${order.additional_info || ''}</td>
+                        <td>${dateStr}</td>
+                        <td>
+                            <select id="lockerSelect_${order.id}" class="status-dropdown">
+                                <option value="">-- Choose Locker --</option>
+                                ${[...Array(10).keys()].map(i => `<option value="${i+1}">Locker ${i+1}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td>
+                            <button class="action-btn btn-approve" onclick="processApproval(${order.id})">Approve</button>
+                            <button class="action-btn btn-decline" onclick="showDeclineConfirmation(${order.id})">Decline</button>
+                        </td>
+                    </tr>`;
+            } else if (['Approved', 'In Locker', 'Picked Up'].includes(order.status)) {
+                activeBody.innerHTML += `
+                    <tr>
+                        <td>${order.id}</td>
+                        <td>${order.email}</td>
+                        <td><strong>Locker ${order.locker_number || 'N/A'}</strong></td>
+                        <td>${itemsHTML}</td>
+                        <td>
+                            <select class="status-dropdown" onchange="updateStatus(${order.id}, this.value)">
+                                <option value="Approved" ${order.status==='Approved'?'selected':''}>Approved</option>
+                                <option value="In Locker" ${order.status==='In Locker'?'selected':''}>In Locker</option>
+                                <option value="Picked Up" ${order.status==='Picked Up'?'selected':''}>Picked Up</option>
+                                <option value="Returned" ${order.status==='Returned'?'selected':''}>Returned by User</option>
+                            </select>
+                        </td>
+                        <td>${dateStr}</td>
+                    </tr>`;
+            } else if (order.status === 'Returned') {
+                returnedBody.innerHTML += `
+                    <tr>
+                        <td>${order.id}</td>
+                        <td>${order.email}</td>
+                        <td>Locker ${order.locker_number}</td>
+                        <td>${itemsHTML}</td>
+                        <td>${order.additional_info || ''}</td>
+                        <td>${dateStr}</td>
+                        <td>
+                            <button class="action-btn btn-approve" onclick="updateStatus(${order.id}, 'Archived')">Confirm & Close File</button>
+                            <button class="action-btn btn-decline" onclick="updateStatus(${order.id}, 'Missing')">Report Missing</button>
+                        </td>
+                    </tr>`;
+            } else if (['Archived', 'Declined', 'Missing'].includes(order.status)) {
+                let badgeClass = order.status === 'Archived' ? 'badge-success' : 'badge-danger';
+                completedBody.innerHTML += `
+                    <tr>
+                        <td>${order.id}</td>
+                        <td>${order.email}</td>
+                        <td>${order.rfid_code || 'N/A'}</td>
+                        <td>${itemsHTML}</td>
+                        <td><span class="status-badge ${badgeClass}">${order.status}</span></td>
+                        <td>${dateStr}</td>
+                    </tr>`;
+            }
+        });
+    }
+
+    async function processApproval(id) {
+        const lockerVal = document.getElementById(`lockerSelect_${id}`).value;
+        if (!lockerVal) {
+            showModal("Locker Assignment Required", "Please assign a locker slot (1-10) before approving this file.", true);
+            return;
+        }
+        await supabaseClient.from('parts_requests').update({ status: 'Approved', locker_number: parseInt(lockerVal) }).eq('id', id);
+        loadOrders();
+    }
+
+    async function updateStatus(id, newStatus) {
+        await supabaseClient.from('parts_requests').update({ status: newStatus }).eq('id', id);
+        loadOrders();
+    }
+
+    function showModal(title, msg, isWarningAlert) {
+        document.getElementById("modalTitle").innerText = title;
+        document.getElementById("modalMessage").innerText = msg;
+        
+        const cancelBtn = document.getElementById("modalCancelBtn");
+        const confirmBtn = document.getElementById("modalConfirmBtn");
+
+        if (isWarningAlert) {
+            errorModalActive = true;
+            cancelBtn.style.display = "none";
+            confirmBtn.innerText = "OK";
+            confirmBtn.style.backgroundColor = "#174f8b";
+        } else {
+            errorModalActive = false;
+            cancelBtn.style.display = "inline-block";
+            confirmBtn.innerText = "Yes, Decline";
+            confirmBtn.style.backgroundColor = "#ff4d4d";
+        }
+
+        document.getElementById("customModal").classList.add("active");
+    }
+
+    function showDeclineConfirmation(id) {
+        orderIdToDecline = id;
+        showModal("Confirm Action", "Are you sure you want to decline this parts request?", false);
+    }
+
+    function closeModal() {
+        orderIdToDecline = null;
+        errorModalActive = false;
+        document.getElementById("customModal").classList.remove("active");
+    }
+
+    document.getElementById("modalCancelBtn").addEventListener("click", closeModal);
+    
+    document.getElementById("modalConfirmBtn").addEventListener("click", async () => {
+        if (errorModalActive) {
+            closeModal();
+        } else if (orderIdToDecline) {
+            await updateStatus(orderIdToDecline, 'Declined');
+            closeModal();
+        }
+    });
+
+    loadOrders();
+</script>
+</body>
+</html>

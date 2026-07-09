@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin - Review Profiles</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL = "https://kkwspswigckmigadbwtz.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable_7lMgT_Pk8LEniQ_0afP6KQ_YUkO3p32";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function checkAuth() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session || !session.user.email.endsWith('sfu.ca')) {
+                window.location.href = "adminLogin.html";
+            }
+        }
+        checkAuth();
+    </script>
+    <link rel="stylesheet" href="adminProfiles.css">
+</head>
+<body>
+
+    <nav class="admin-navbar">
+        <div class="nav-brand">ESSS Admin Portal</div>
+        <div class="nav-links">
+            <a href="adminOrders.html">Orders</a>
+            <a href="adminProfiles.html" class="active">Profiles</a>
+            <a href="#" id="logoutLink" class="logout-link">Logout</a>
+        </div>
+    </nav>
+
+    <div class="admin-container">
+        <h2>Admin Portal: Profile Dashboard</h2>
+
+        <div class="section">
+            <h3>Pending Accounts</h3>
+            <div class="table-responsive">
+                <table id="pendingTable">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>RFID Code</th>
+                            <th>Requested At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>All Registered Accounts Directory</h3>
+            <div class="table-responsive">
+                <table id="profilesTable">
+                    <thead>
+                        <tr>
+                            <th>Database ID</th>
+                            <th>Email Address</th>
+                            <th>RFID Hardware Badge ID</th>
+                            <th>Approval Status Badge</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="customModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Confirm Profile Erasure</h3>
+            <p id="modalMessage">Are you sure you want to deny and wipe out this account registration row entirely?</p>
+            <div class="modal-buttons">
+                <button id="modalCancelBtn" class="modal-btn btn-secondary">Cancel</button>
+                <button id="modalConfirmBtn" class="modal-btn btn-danger">Confirm Delete</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    let profileIdToDelete = null;
+
+    document.getElementById("logoutLink").addEventListener("click", async (e) => {
+        e.preventDefault();
+        await supabaseClient.auth.signOut();
+        window.location.href = "adminLogin.html";
+    });
+
+    async function loadProfiles() {
+        const { data: profileRows, error } = await supabaseClient
+            .from('profiles')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error(error.message);
+            return;
+        }
+
+        const masterBody = document.querySelector("#profilesTable tbody");
+        const pendingBody = document.querySelector("#pendingTable tbody");
+        
+        masterBody.innerHTML = "";
+        pendingBody.innerHTML = "";
+
+        profileRows.forEach(p => {
+            const formattedTime = new Date(p.created_at).toLocaleString();
+            
+            const directoryRow = `<tr>
+                <td>${p.id}</td>
+                <td>${p.email}</td>
+                <td><code>${p.rfid_code}</code></td>
+                <td><span class="status-badge ${p.approved ? 'badge-approved' : 'badge-pending'}">${p.approved ? 'Approved' : 'Pending'}</span></td>
+            </tr>`;
+            masterBody.innerHTML += directoryRow;
+
+            if (!p.approved) {
+                const pendingRow = `<tr>
+                    <td>${p.email}</td>
+                    <td><code>${p.rfid_code}</code></td>
+                    <td>${formattedTime}</td>
+                    <td>
+                        <button class="approve-btn" onclick="updateProfileStatus(${p.id}, true)">Approve</button>
+                        <button class="deny-btn" onclick="showDeleteModal(${p.id}, 'Are you sure you want to deny and remove this user registration?')">Deny</button>
+                    </td>
+                </tr>`;
+                pendingBody.innerHTML += pendingRow;
+            }
+        });
+    }
+
+    async function updateProfileStatus(id, approveStatus) {
+        await supabaseClient.from('profiles').update({ approved: approveStatus }).eq('id', id);
+        loadProfiles();
+    }
+
+    function showDeleteModal(id, message) {
+        profileIdToDelete = id;
+        document.getElementById("modalMessage").innerText = message;
+        document.getElementById("customModal").classList.add("active");
+    }
+
+    function closeDeleteModal() {
+        profileIdToDelete = null;
+        document.getElementById("customModal").classList.remove("active");
+    }
+
+    document.getElementById("modalCancelBtn").addEventListener("click", closeDeleteModal);
+    
+    document.getElementById("modalConfirmBtn").addEventListener("click", async () => {
+        if (profileIdToDelete) {
+            await supabaseClient.from('profiles').delete().eq('id', profileIdToDelete);
+            closeDeleteModal();
+            loadProfiles();
+        }
+    });
+
+    loadProfiles();
+</script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Signup</title>
+    <link rel="stylesheet" href="register.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .status-box {
+            display: none;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            text-align: left;
+            line-height: 1.5;
+        }
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Register</h2>
+
+    <div id="statusAlert" class="status-box"></div>
+
+    <form id="registerForm">
+        <label>Email</label>
+        <input type="email" id="regEmail" name="email" required>
+
+        <label>RFID Code</label>
+        <input type="text" id="regRfid" name="rfid_code" required>
+
+        <button type="submit" id="submitBtn">Register</button>
+    </form>
+
+    <p>Please allow up to a few days for your account to be approved</p>
+    <p>*Note: If you want to change your rfid code register again with the new code, this does not need approval*</p>
+
+    <a href="index.html">Back</a>
+</div>
+
+<script>
+    const SUPABASE_URL = "https://kkwspswigckmigadbwtz.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_7lMgT_Pk8LEniQ_0afP6KQ_YUkO3p32";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const statusAlert = document.getElementById("statusAlert");
+    const submitBtn = document.getElementById("submitBtn");
+
+    document.getElementById("registerForm").addEventListener("submit", async function(event) {
+        event.preventDefault();
+
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Registering...";
+
+        statusAlert.style.display = "none";
+        statusAlert.className = "status-box"; 
+        statusAlert.innerHTML = "";
+
+        const emailValue = document.getElementById("regEmail").value;
+        const rfidValue = document.getElementById("regRfid").value;
+
+        try {
+            const { data, error } = await supabaseClient
+                .from('profiles')
+                .upsert(
+                    { email: emailValue, rfid_code: rfidValue }, 
+                    { onConflict: 'email', returning: 'minimal' }
+                );
+
+            if (error) {
+                statusAlert.innerHTML = `<strong>Unsuccessful Registration</strong><br>Database Error: ${error.message}`;
+                statusAlert.classList.add("status-error");
+                statusAlert.style.display = "block";
+                
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Register";
+            } else {
+                statusAlert.innerHTML = `
+                    <strong>Registration Request Success</strong><br>
+                    <strong>Email:</strong> ${emailValue}<br>
+                    <strong>RFID Code:</strong> ${rfidValue}
+                `;
+                statusAlert.classList.add("status-success");
+                statusAlert.style.display = "block";
+                
+                document.getElementById("registerForm").reset();
+                
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Register";
+            }
+        } catch (catchError) {
+            statusAlert.innerHTML = `<strong>Unsuccessful Registration Request</strong><br>System Error: ${catchError.message}`;
+            statusAlert.classList.add("status-error");
+            statusAlert.style.display = "block";
+            
+            submitBtn.disabled = false;
+            submitBtn.innerText = "Register";
+        }
+    });
+</script>
+
+</body>
+</html>

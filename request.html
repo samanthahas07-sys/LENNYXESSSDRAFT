@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Parts Request</title>
+    <link rel="stylesheet" href="request.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .error-message {
+            display: none; 
+            background-color: #ffdddd;
+            color: #d8000c;
+            border: 1px solid #d8000c;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .success-message {
+            display: none; 
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        button[type="submit"]:disabled {
+            background: #cccccc;
+            color: #666666;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Parts Request</h2>
+    <p>Please make sure you have a registered account</p>
+
+    <div id="errorAlert" class="error-message"></div>
+    <div id="successAlert" class="success-message"></div>
+
+    <form id="partsForm">
+        <label>Email</label>
+        <input type="email" id="reqEmail" required style="width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box;">
+
+        <div id="partsContainer">
+            <div class="partRow">
+                <label>Select Part & Quantity</label>
+                <div class="row">
+                    <select class="partSelect">
+                        <option value="">-- Choose a part --</option>
+                        <option>Motor</option>
+                        <option>Sensor</option>
+                        <option>Battery</option>
+                        <option>RFID Tag</option>
+                        <option>Microcontroller</option>
+                    </select>
+                    
+                    <select class="qtySelect">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                    </select>
+
+                    <button type="button" class="removeBtn">X</button>
+                </div>
+            </div>
+        </div>
+
+        <label>Additional Information</label>
+        <textarea id="reqNotes" rows="5" maxlength="500" placeholder="Describe your request (max 500 chars)..."></textarea>
+
+        <button type="submit" id="submitBtn">Submit Request</button>
+    </form>
+
+    <a href="index.html">Back</a>
+</div>
+
+<script>
+    //SUPABASE Keys
+    const SUPABASE_URL = "https://kkwspswigckmigadbwtz.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_7lMgT_Pk8LEniQ_0afP6KQ_YUkO3p32";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const container = document.getElementById("partsContainer");
+    const errorAlert = document.getElementById("errorAlert");
+    const successAlert = document.getElementById("successAlert");
+    const submitBtn = document.getElementById("submitBtn");
+
+    container.addEventListener("change", function (event) {
+        if (event.target.classList.contains("partSelect")) {
+            const selects = document.querySelectorAll(".partSelect");
+            const lastSelect = selects[selects.length - 1];
+
+            if (event.target === lastSelect && lastSelect.value !== "") {
+                addNewDropdown();
+            }
+        }
+    });
+
+    container.addEventListener("click", function (event) {
+        if (event.target.classList.contains("removeBtn")) {
+            const row = event.target.closest(".partRow");
+            row.remove();
+
+            if (document.querySelectorAll(".partRow").length === 0) {
+                addNewDropdown();
+            }
+        }
+    });
+
+    function addNewDropdown() {
+        const div = document.createElement("div");
+        div.classList.add("partRow");
+
+        div.innerHTML = `
+            <label>Select Part & Quantity</label>
+            <div class="row">
+                <select class="partSelect">
+                    <option value="">-- Choose a part --</option>
+                    <option>Motor</option>
+                    <option>Sensor</option>
+                    <option>Battery</option>
+                    <option>RFID Tag</option>
+                    <option>Microcontroller</option>
+                </select>
+                <select class="qtySelect">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                </select>
+                <button type="button" class="removeBtn">X</button>
+            </div>
+        `;
+        container.appendChild(div);
+    }
+
+    document.getElementById("partsForm").addEventListener("submit", async function(event) {
+        event.preventDefault();
+        
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Submitting...";
+
+        errorAlert.style.display = "none";
+        errorAlert.innerText = "";
+        successAlert.style.display = "none";
+        successAlert.innerText = "";
+
+        try {
+            const emailValue = document.getElementById("reqEmail").value;
+            const notesValue = document.getElementById("reqNotes").value;
+
+            const { data: profile, error: profileError } = await supabaseClient
+                .from('profiles')
+                .select('approved')
+                .eq('email', emailValue)
+                .maybeSingle(); 
+
+            if (profileError) {
+                errorAlert.innerText = "Verification Error: " + profileError.message;
+                errorAlert.style.display = "block";
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Request";
+                return;
+            }
+
+            if (!profile) {
+                errorAlert.innerText = "Access Denied: This email is not registered in our system.";
+                errorAlert.style.display = "block";
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Request";
+                return;
+            }
+
+            if (profile.approved !== true) {
+                errorAlert.innerText = "Access Denied: Your account registration is still pending admin approval.";
+                errorAlert.style.display = "block";
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Request";
+                return;
+            }
+
+            const itemsArray = [];
+
+            const matchingRows = document.querySelectorAll(".partRow");
+            matchingRows.forEach(row => {
+                const partChoice = row.querySelector(".partSelect").value;
+                const qtyChoice = parseInt(row.querySelector(".qtySelect").value);
+
+                if (partChoice !== "") {
+                    const existingItem = itemsArray.find(item => item.part_name === partChoice);
+                    
+                    if (existingItem) {
+                        existingItem.quantity += qtyChoice;
+                    } else {
+                        itemsArray.push({
+                            part_name: partChoice,
+                            quantity: qtyChoice
+                        });
+                    }
+                }
+            });
+
+            if (itemsArray.length === 0) {
+                errorAlert.innerText = "Please choose at least one part before submitting.";
+                errorAlert.style.display = "block";
+                
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Request";
+                return;
+            }
+
+            const { error: requestError } = await supabaseClient
+                .from('parts_requests')
+                .insert([
+                    { 
+                        email: emailValue, 
+                        additional_info: notesValue,
+                        items: itemsArray 
+                    }
+                ]);
+
+            if (requestError) {
+                errorAlert.innerText = requestError.message;
+                errorAlert.style.display = "block";
+                
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Request";
+                return;
+            }
+
+            successAlert.innerText = "Parts requested successfully! Please wait for a confirmation email with further instructions.";
+            successAlert.style.display = "block";
+            
+            document.getElementById("partsForm").reset();
+            
+            submitBtn.disabled = false;
+            submitBtn.innerText = "Submit Request";
+
+        } catch (catchError) {
+            errorAlert.innerText = "System Error: " + catchError.message;
+            errorAlert.style.display = "block";
+            
+            submitBtn.disabled = false;
+            submitBtn.innerText = "Submit Request";
+        }
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Login</title>
+    <link rel="stylesheet" href="register.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .error-box {
+            display: none;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Admin Login</h2>
+
+    <div id="loginError" class="error-box">Invalid credentials. Access denied.</div>
+
+    <form id="loginForm">
+        <label>Admin Email</label>
+        <input type="email" id="loginEmail" required>
+
+        <label>Password</label>
+        <input type="password" id="loginPassword" required>
+
+        <button type="submit">Sign In</button>
+    </form>
+
+    <a href="index.html">Back to Home</a>
+</div>
+
+<script>
+    const SUPABASE_URL = "https://kkwspswigckmigadbwtz.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_7lMgT_Pk8LEniQ_0afP6KQ_YUkO3p32";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    document.getElementById("loginForm").addEventListener("submit", async function(event) {
+        event.preventDefault();
+        
+        const email = document.getElementById("loginEmail").value;
+        const pass = document.getElementById("loginPassword").value;
+        const errorBox = document.getElementById("loginError");
+
+        errorBox.style.display = "none";
+
+        try {
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
+                email: email,
+                password: pass
+            });
+
+            if (data.user && !error) {
+                window.location.href = "adminOrders.html"; 
+            } else {
+                errorBox.innerText = error ? error.message : "Invalid credentials. Access denied.";
+                errorBox.style.display = "block";
+            }
+        } catch (err) {
+            console.error(err);
+            errorBox.innerText = "System error during login.";
+            errorBox.style.display = "block";
+        }
+    });
+</script>
+
+</body>
+</html>
