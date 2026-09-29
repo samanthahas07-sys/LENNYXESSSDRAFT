@@ -4,8 +4,8 @@
     <title>Admin - Review Orders</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-    const SUPABASE_URL = "https://ofxtubgnacanpmpuqwnn.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable__Pt2SumMDa1xFhIC_Ml3JA_ewC4AkSI";
+        const SUPABASE_URL = "https://ofxtubgnacanpmpuqwnn.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable__Pt2SumMDa1xFhIC_Ml3JA_ewC4AkSI";
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         async function checkAuth() {
@@ -30,14 +30,24 @@
     </nav>
 
     <div class="admin-container">
-        <h2>Admin Portal: Parts Order Dashboard</h2>
+        <h2>Orders Dashboard</h2>
 
         <div class="section">
             <h3>Pending Orders</h3>
             <div class="table-responsive">
                 <table id="pendingOrders">
                     <thead>
-                        <tr><th>ID</th><th>User Email</th><th>RFID Code</th><th>Requested Items</th><th>Notes</th><th>Last Updated</th><th>Assign Locker First</th><th>Actions</th></tr>
+                        <tr>
+                            <th>ID</th>
+                            <th>User Email</th>
+                            <th>RFID Code</th>
+                            <th>Requested Items</th>
+                            <th>Notes</th>
+                            <th>Last Updated</th>
+                            <th>Set Deadline</th>
+                            <th>Assigned Locker</th>
+                            <th>Actions</th>
+                        </tr>
                     </thead>
                     <tbody></tbody>
                 </table>
@@ -49,7 +59,15 @@
             <div class="table-responsive">
                 <table id="activeOrders">
                     <thead>
-                        <tr><th>ID</th><th>User Email</th><th>Locker #</th><th>Items List</th><th>Status State</th><th>Last Updated Stamp</th></tr>
+                        <tr>
+                            <th>ID</th>
+                            <th>User Email</th>
+                            <th>Locker #</th>
+                            <th>Items List</th>
+                            <th>Status</th>
+                            <th>Deadline Status</th>
+                            <th>Last Updated Stamp</th>
+                        </tr>
                     </thead>
                     <tbody></tbody>
                 </table>
@@ -61,7 +79,7 @@
             <div class="table-responsive">
                 <table id="returnedOrders">
                     <thead>
-                        <tr><th>ID</th><th>User Email</th><th>Locker Assigned</th><th>Items Returned</th><th>Notes</th><th>Timestamp</th><th>Action Checkpoint</th></tr>
+                        <tr><th>ID</th><th>User Email</th><th>Locker Assigned</th><th>Items Returned</th><th>Notes</th><th>Timestamp</th><th>Action</th></tr>
                     </thead>
                     <tbody></tbody>
                 </table>
@@ -73,7 +91,7 @@
             <div class="table-responsive">
                 <table id="completedOrders">
                     <thead>
-                        <tr><th>ID</th><th>User Email</th><th>RFID Code</th><th>Items Manifest</th><th>Final Status</th><th>Closed At</th></tr>
+                        <tr><th>ID</th><th>User Email</th><th>RFID Code</th><th>Items</th><th>Final Status</th><th>Closed At</th></tr>
                     </thead>
                     <tbody></tbody>
                 </table>
@@ -102,6 +120,21 @@
         window.location.href = "adminLogin.html";
     });
 
+    // Computes exactly 1 month from now at 12:00 AM formatted for datetime-local
+    function getDefaultOneMonthDate() {
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1);
+        d.setHours(0, 0, 0, 0);
+        
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
     async function loadOrders() {
         const { data: requests, error } = await supabaseClient
             .from('parts_requests')
@@ -109,7 +142,7 @@
             .order('status_changed_at', { ascending: false });
 
         if (error) {
-            console.error(error.message);
+            console.error("Error loading orders:", error.message);
             return;
         }
 
@@ -124,7 +157,14 @@
         completedBody.innerHTML = "";
 
         requests.forEach(order => {
-            const dateStr = new Date(order.status_changed_at).toLocaleString();
+            const dateStr = order.status_changed_at ? new Date(order.status_changed_at).toLocaleString() : 'N/A';
+            
+            let defaultDeadlineValue = "";
+            if (order.deadline) {
+                defaultDeadlineValue = new Date(order.deadline).toISOString().slice(0, 16);
+            } else {
+                defaultDeadlineValue = getDefaultOneMonthDate();
+            }
             
             let itemsHTML = "<ul>";
             if (Array.isArray(order.items)) {
@@ -144,9 +184,12 @@
                         <td>${order.additional_info || ''}</td>
                         <td>${dateStr}</td>
                         <td>
+                            <input type="datetime-local" id="deadlineInput_${order.id}" value="${defaultDeadlineValue}" class="deadline-input" style="padding: 6px; border: 1px solid #ddd; border-radius: 6px;">
+                        </td>
+                        <td>
                             <select id="lockerSelect_${order.id}" class="status-dropdown">
                                 <option value="">-- Choose Locker --</option>
-                                ${[...Array(10).keys()].map(i => `<option value="${i+1}">Locker ${i+1}</option>`).join('')}
+                                ${[...Array(7).keys()].map(i => `<option value="${i+1}">Locker ${i+1}</option>`).join('')}
                             </select>
                         </td>
                         <td>
@@ -155,6 +198,30 @@
                         </td>
                     </tr>`;
             } else if (['Approved', 'In Locker', 'Picked Up'].includes(order.status)) {
+                let deadlineHtml = '<span style="color: #6c757d;">No deadline set</span>';
+                if (order.deadline) {
+                    const now = new Date();
+                    const deadlineDate = new Date(order.deadline);
+                    const diffMs = deadlineDate - now;
+
+                    if (diffMs <= 0) {
+                        deadlineHtml = '<span class="status-badge state-declined" style="background-color: #f8d7da; color: #721c24;">Overdue</span>';
+                    } else {
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                        
+                        let timeRemainingStr = "";
+                        if (diffDays > 0) {
+                            timeRemainingStr = `${diffDays}d ${diffHours}h left`;
+                        } else {
+                            const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                            timeRemainingStr = `${diffHours}h ${diffMinutes}m left`;
+                        }
+
+                        deadlineHtml = `<div><strong>Due:</strong> ${deadlineDate.toLocaleDateString()}</div><div style="font-size: 12px; color: #e06d06; font-weight: bold;">${timeRemainingStr}</div>`;
+                    }
+                }
+
                 activeBody.innerHTML += `
                     <tr>
                         <td>${order.id}</td>
@@ -169,6 +236,7 @@
                                 <option value="Returned" ${order.status==='Returned'?'selected':''}>Returned by User</option>
                             </select>
                         </td>
+                        <td>${deadlineHtml}</td>
                         <td>${dateStr}</td>
                     </tr>`;
             } else if (order.status === 'Returned') {
@@ -200,20 +268,33 @@
         });
     }
 
-    async function processApproval(id) {
+    window.processApproval = async function(id) {
         const lockerVal = document.getElementById(`lockerSelect_${id}`).value;
+        const deadlineVal = document.getElementById(`deadlineInput_${id}`).value;
+
         if (!lockerVal) {
-            showModal("Locker Assignment Required", "Please assign a locker slot (1-10) before approving this file.", true);
+            showModal("Locker Assignment Required", "Please assign a locker slot before approving this file.", true);
             return;
         }
-        await supabaseClient.from('parts_requests').update({ status: 'Approved', locker_number: parseInt(lockerVal) }).eq('id', id);
-        loadOrders();
-    }
 
-    async function updateStatus(id, newStatus) {
+        const { error } = await supabaseClient.from('parts_requests').update({ 
+            status: 'Approved', 
+            locker_number: parseInt(lockerVal),
+            deadline: deadlineVal ? new Date(deadlineVal).toISOString() : null
+        }).eq('id', id);
+
+        if (error) {
+            showModal("Error", error.message, true);
+            return;
+        }
+
+        loadOrders();
+    };
+
+    window.updateStatus = async function(id, newStatus) {
         await supabaseClient.from('parts_requests').update({ status: newStatus }).eq('id', id);
         loadOrders();
-    }
+    };
 
     function showModal(title, msg, isWarningAlert) {
         document.getElementById("modalTitle").innerText = title;
@@ -237,10 +318,10 @@
         document.getElementById("customModal").classList.add("active");
     }
 
-    function showDeclineConfirmation(id) {
+    window.showDeclineConfirmation = function(id) {
         orderIdToDecline = id;
         showModal("Confirm Action", "Are you sure you want to decline this parts request?", false);
-    }
+    };
 
     function closeModal() {
         orderIdToDecline = null;
@@ -254,7 +335,7 @@
         if (errorModalActive) {
             closeModal();
         } else if (orderIdToDecline) {
-            await updateStatus(orderIdToDecline, 'Declined');
+            await window.updateStatus(orderIdToDecline, 'Declined');
             closeModal();
         }
     });

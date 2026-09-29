@@ -11,12 +11,11 @@ body {
     padding: 30px;
     border-radius: 10px;
     text-align: center;
-    box-shadow: 0 0 12px rgba(0,0,0,0.15);
 }
 
 .btn {
     display: block;
-    background: #174f8b;
+    background: #203a6c ;
     color: white;
     padding: 12px;
     margin: 15px 0;
@@ -25,5 +24,5 @@ body {
 }
 
 .btn:hover {
-    background: #0e3053;
+    background: #384f75;
 }

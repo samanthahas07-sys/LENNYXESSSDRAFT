@@ -30,7 +30,7 @@
     </nav>
 
     <div class="admin-container">
-        <h2>Admin Portal: Profile Dashboard</h2>
+        <h2>Accounts Dashboard</h2>
 
         <div class="section">
             <h3>Pending Accounts</h3>
@@ -69,17 +69,17 @@
 
     <div id="customModal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Confirm Profile Erasure</h3>
-            <p id="modalMessage">Are you sure you want to deny and wipe out this account registration row entirely?</p>
+            <h3>Confirm Profile Denial</h3>
+            <p id="modalMessage">Are you sure you want to decline this account registration?</p>
             <div class="modal-buttons">
                 <button id="modalCancelBtn" class="modal-btn btn-secondary">Cancel</button>
-                <button id="modalConfirmBtn" class="modal-btn btn-danger">Confirm Delete</button>
+                <button id="modalConfirmBtn" class="modal-btn btn-danger">Confirm Decline</button>
             </div>
         </div>
     </div>
 
 <script>
-    let profileIdToDelete = null;
+    let profileIdToDecline = null;
 
     document.getElementById("logoutLink").addEventListener("click", async (e) => {
         e.preventDefault();
@@ -107,22 +107,31 @@
         profileRows.forEach(p => {
             const formattedTime = new Date(p.created_at).toLocaleString();
             
+            let statusBadge = "";
+            if (p.approved === true) {
+                statusBadge = '<span class="status-badge badge-approved">Approved</span>';
+            } else if (p.approved === false) {
+                statusBadge = '<span class="status-badge badge-declined" style="background-color: #f8d7da; color: #721c24;">Declined</span>';
+            } else {
+                statusBadge = '<span class="status-badge badge-pending">Pending</span>';
+            }
+
             const directoryRow = `<tr>
                 <td>${p.id}</td>
                 <td>${p.email}</td>
                 <td><code>${p.rfid_code}</code></td>
-                <td><span class="status-badge ${p.approved ? 'badge-approved' : 'badge-pending'}">${p.approved ? 'Approved' : 'Pending'}</span></td>
+                <td>${statusBadge}</td>
             </tr>`;
             masterBody.innerHTML += directoryRow;
 
-            if (!p.approved) {
+            if (p.approved === null || p.approved === undefined) {
                 const pendingRow = `<tr>
                     <td>${p.email}</td>
                     <td><code>${p.rfid_code}</code></td>
                     <td>${formattedTime}</td>
                     <td>
                         <button class="approve-btn" onclick="updateProfileStatus(${p.id}, true)">Approve</button>
-                        <button class="deny-btn" onclick="showDeleteModal(${p.id}, 'Are you sure you want to deny and remove this user registration?')">Deny</button>
+                        <button class="deny-btn" onclick="showDeclineModal(${p.id}, 'Are you sure you want to decline this user registration?')">Deny</button>
                     </td>
                 </tr>`;
                 pendingBody.innerHTML += pendingRow;
@@ -135,24 +144,23 @@
         loadProfiles();
     }
 
-    function showDeleteModal(id, message) {
-        profileIdToDelete = id;
+    function showDeclineModal(id, message) {
+        profileIdToDecline = id;
         document.getElementById("modalMessage").innerText = message;
         document.getElementById("customModal").classList.add("active");
     }
 
-    function closeDeleteModal() {
-        profileIdToDelete = null;
+    function closeDeclineModal() {
+        profileIdToDecline = null;
         document.getElementById("customModal").classList.remove("active");
     }
 
-    document.getElementById("modalCancelBtn").addEventListener("click", closeDeleteModal);
+    document.getElementById("modalCancelBtn").addEventListener("click", closeDeclineModal);
     
     document.getElementById("modalConfirmBtn").addEventListener("click", async () => {
-        if (profileIdToDelete) {
-            await supabaseClient.from('profiles').delete().eq('id', profileIdToDelete);
-            closeDeleteModal();
-            loadProfiles();
+        if (profileIdToDecline) {
+            await updateProfileStatus(profileIdToDecline, false);
+            closeDeclineModal();
         }
     });
 

@@ -13,7 +13,6 @@ body {
     background: white;
     padding: 30px;
     border-radius: 10px;
-    box-shadow: 0 0 12px rgba(0,0,0,0.15);
     text-align: left;
 }
 
@@ -31,7 +30,7 @@ input, button {
 }
 
 button {
-    background: #174f8b;
+    background: #203a6c;
     color: white;
     border: none;
     border-radius: 5px;
@@ -41,7 +40,7 @@ button {
 }
 
 button:hover {
-    background: #0e3053;
+    background: #384f75;
 }
 
 button:disabled {
